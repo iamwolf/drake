@@ -33,10 +33,11 @@ int main(int argc, char *argv[]) {
             Kd(actuator_idx, b->velocity_num_start) = 1;
         }
     }
-    auto lwr_with_pd = make_shared < PDControlSystem < RigidBodySystem >> (rigid_body_sys, Kp, Kd);
+//    auto lwr_with_pd = make_shared < PDControlSystem < RigidBodySystem >> (rigid_body_sys, Kp, Kd);
 
     auto visualizer = make_shared < BotVisualizer < RigidBodySystem::StateVector >> (lcm, tree);
-    auto sys = cascade(lwr_with_pd, visualizer);
+//    auto sys = cascade(lwr_with_pd, visualizer);
+    auto sys = cascade(rigid_body_sys, visualizer);
 
     SimulationOptions options = default_simulation_options;
     rigid_body_sys->penetration_stiffness = 5000.0;
@@ -46,8 +47,27 @@ int main(int argc, char *argv[]) {
 
     VectorXd x0(rigid_body_sys->getNumStates());
     x0.head(tree->num_positions) = tree->getZeroConfiguration();
-    for (int i = 7; i < 14; i++)
-        x0(i) = 1.1; // Example Test: give it some initial velocity
+//    for (int i = 7; i < 14; i++)
+//        x0(i) = 1.1; // Example Test: give it some initial velocity
+
+//    VectorXd u(getNumInputs(*rigid_body_sys));
+//    u.setZero(); //    u.setRandom();
+//    for (int i = 0; i < 7; i++)
+//        u(i) = 50;
+//    double t = 0.0;
+//    double dt = 0.1;
+//    auto y = sys->output(t,x0,u);
+//    auto xdot = sys->dynamics(t,x0,u);
+//    cout << "x0::" << std::endl << x0 << std::endl << "xdot::" << std::endl << xdot << std::endl;
+//    auto x = toEigen(x0) + dt * toEigen(xdot);
+//
+//    cout << "x::" << std::endl << x << std::endl << std::endl;
+//
+//    x0.setRandom();
+//    x0 = x0 * M_PI;
+//    auto ggg = sys->output(t,x0,u);
+//    cout << "Before" << std::endl << x0 << std::endl;
+//    cout << "After" << std::endl << ggg << std::endl << std::endl;
 
     runLCM(sys, lcm, 0, std::numeric_limits<double>::max(), x0, options);
 
