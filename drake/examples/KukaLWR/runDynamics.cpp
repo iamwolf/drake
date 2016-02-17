@@ -27,7 +27,7 @@ int main(int argc, char *argv[]) {
         Kd.setZero();
 
         for (int actuator_idx = 0; actuator_idx < tree->actuators.size(); actuator_idx++) {
-            std::cout << tree->actuators[actuator_idx].name << std::endl;
+//            std::cout << tree->actuators[actuator_idx].name << std::endl;
             auto const &b = tree->actuators[actuator_idx].body;
             Kp(actuator_idx, b->position_num_start) = 50;
             Kd(actuator_idx, b->velocity_num_start) = 1;
