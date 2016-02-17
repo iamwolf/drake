@@ -10,8 +10,8 @@ using namespace Drake;
 
 int main(int argc, char *argv[]) {
     auto rigid_body_sys = make_shared<RigidBodySystem>(getDrakePath() +
-                                                       "/examples/KukaLWR/lwr_defs/robots/lwr_drake.urdf",
-                                                       DrakeJoint::FIXED); // TODO: copy URDF instead of symlinking oh-distro lwr_defs
+                                                       "/examples/KukaLWR/urdf/lwr.urdf",
+                                                       DrakeJoint::FIXED);
 
     auto const &tree = rigid_body_sys->getRigidBodyTree();
 
