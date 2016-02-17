@@ -31,6 +31,8 @@ if isempty(packages)  % cache packages
   package_paths{end+1} = [getDrakePath,'/examples/Valkyrie'];
   packages{end+1} = 'IRB140';
   package_paths{end+1} = [getDrakePath,'/examples/IRB140'];
+  packages{end+1} = 'KukaLWR';
+  package_paths{end+1} = [getDrakePath,'/examples/KukaLWR'];
 end
 
 if strcmp(package,'-list')
