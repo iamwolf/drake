@@ -29,7 +29,7 @@ end
 
 gripper_idx = findLinkId(r,'link_6');
 gripper_pt = [-0.04,0,0.1]';
-grasp_orient = angle2quat(-1.3,1.1,0.8)';
+grasp_orient = [0.5019245, -0.63724683, 0.18234105, 0.55564378]'; %angle2quat(-1.3,1.1,0.8)';
 
 T = 1;
 N = 2;
