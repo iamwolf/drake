@@ -24,15 +24,11 @@ if ~isfield(options,'base_rpy')
     options.base_rpy = [0.0, 0.0, 0.0]';
 end
 
-% Time step for TimeSteppingRBM
-timestep = 0.01;
-
 % Silence warning that cylinders have been replaced with cones
 w = warning('off','Drake:RigidBodyManipulator:ReplacedCylinder');
 
-%r=RigidBodyManipulator();
-%r = addRobotFromURDF(r,'urdf/lwr.urdf',options.base_offset,options.base_rpy);
-r=TimeSteppingRigidBodyManipulator('urdf/lwr.urdf', timestep, options);
+r = RigidBodyManipulator();
+r = addRobotFromURDF(r,[getDrakePath(),'/examples/KukaLWR/urdf/lwr.urdf'],options.base_offset,options.base_rpy);
 
 if (options.visualize)
     v=r.constructVisualizer();
