@@ -63,6 +63,24 @@
 %immutable RigidBodyTree::loops;
 %include "drake/systems/plants/RigidBodyTree.h"
 %extend RigidBodyTree {
+  RigidBodyTree(const std::string& urdf_filename, const std::string& joint_type) {
+    // FIXED = 0, ROLLPITCHYAW = 1, QUATERNION = 2
+    DrakeJoint::FloatingBaseType floating_base_type;
+
+    if (joint_type == "FIXED")
+      floating_base_type = DrakeJoint::FIXED;
+    else if (joint_type == "ROLLPITCHYAW")
+      floating_base_type = DrakeJoint::ROLLPITCHYAW;
+    else if (joint_type == "QUATERNION")
+      floating_base_type = DrakeJoint::QUATERNION;
+    else {
+      std::cerr << "Joint Type not supported" << std::endl;
+      return nullptr;
+    }
+
+    return new RigidBodyTree(urdf_filename, floating_base_type);
+  }
+
   KinematicsCache<double> doKinematics(const Eigen::MatrixBase<Eigen::VectorXd>& q, const Eigen::MatrixBase<Eigen::VectorXd>& v) {
     return $self->doKinematics(q, v);
   }
@@ -95,6 +113,15 @@
 
   Eigen::Matrix<double, SPACE_DIMENSION, 1> centerOfMass(KinematicsCache<double> &cache, const std::set<int> &robotnum = default_robot_num_set) const {
     return $self->centerOfMass(cache, robotnum);
+  }
+
+  Eigen::Matrix<double, SPACE_DIMENSION, Eigen::Dynamic> centerOfMassJacobian(KinematicsCache<double>& cache, const std::set<int>& robotnum = default_robot_num_set, bool in_terms_of_qdot = false) const {
+    return $self->centerOfMassJacobian(cache, robotnum, in_terms_of_qdot);
+  }
+
+  Eigen::VectorXd getRandomConfiguration() const {
+    std::default_random_engine generator(std::random_device{}());
+    return $self->getRandomConfiguration(generator);
   }
 }
 
