@@ -5,6 +5,8 @@
 #include "../../../util/drakeGeometryUtil.h"
 #include "drake/core/Gradient.h"
 
+#include <chrono>
+
 using namespace Eigen;
 
 void drakePrintMatrix(const MatrixXd &mat) {
@@ -32,8 +34,7 @@ RigidBodyConstraint::RigidBodyConstraint(int category, RigidBodyTree *robot,
   this->type = 0;
   this->robot = robot;
   if (tspan(0) > tspan(1)) {
-    std::cerr << "Drake:RigidBodyConstraint:tspan(0) should be no larger than "
-                 "tspan(1)" << std::endl;
+    std::cerr << "Drake:RigidBodyConstraint:tspan(0) should be no larger than tspan(1)" << std::endl;
   }
   this->tspan[0] = tspan(0);
   this->tspan[1] = tspan(1);
@@ -104,11 +105,24 @@ void QuasiStaticConstraint::eval(const double *t,
                                  KinematicsCache<double> &cache,
                                  const double *weights, VectorXd &c,
                                  MatrixXd &dc) const {
+  // modified by wxm
   if (this->isTimeValid(t)) {
     int nq = this->robot->num_positions;
     dc.resize(2, nq + this->num_pts);
+    
+    auto start = std::chrono::steady_clock::now();
+
     auto com = robot->centerOfMass(cache, m_robotnumset);
     auto dcom = robot->centerOfMassJacobian(cache, m_robotnumset, true);
+    
+    auto end = std::chrono::steady_clock::now();
+    auto diff = end - start;
+    std::cout << "COM/COMJ: " << std::chrono::duration<double, std::nano>(diff).count()
+              << " nano-seconds" << std::endl;
+
+    // std::cout << "com " << com.size() << std::endl;
+    // std::cout << "dcom " << dcom.size() << std::endl;
+
     MatrixXd contact_pos(3, this->num_pts);
     MatrixXd dcontact_pos(3 * this->num_pts, nq);
     int num_accum_pts = 0;
@@ -143,6 +157,7 @@ void QuasiStaticConstraint::eval(const double *t,
           dcenter_pos.block(0, 0, 2, nq) * (1.0 - this->shrinkFactor) +
           dcontact_pos.block(3 * i, 0, 2, nq) * this->shrinkFactor;
       c = c - weights[i] * support_pos.col(i);
+      // std::cout << "weights " << i << ": " << weights[i] << std::endl;
       dc.block(0, 0, 2, nq) = dc.block(0, 0, 2, nq) -
                               weights[i] * dsupport_pos.block(2 * i, 0, 2, nq);
     }

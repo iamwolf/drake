@@ -9,6 +9,9 @@
 #include <limits>
 #include <cmath>
 
+#include <ctime>
+#include <chrono>
+
 namespace snopt {
 #include "snopt.hh"
 #include "snfilewrapper.hh"
@@ -131,6 +134,8 @@ static void gevalNumerical(void (*func_ptr)(const VectorXd&, VectorXd&),
 
 static void IK_constraint_fun(KinematicsCache<double>& cache, double* x,
                               double* c, double* G) {
+  // clock_t start = clock();
+
   double* qsc_weights = nullptr;
   if (qscActiveFlag) {
     qsc_weights = x + nq;
@@ -151,17 +156,35 @@ static void IK_constraint_fun(KinematicsCache<double>& cache, double* x,
   for (int i = 0; i < num_st_lpc; i++) {
     nc_accum += st_lpc_nc[i];
   }
+
+  // Quasi-static Constraint
   if (qscActiveFlag) {
     int num_qsc_cnst = qsc_ptr->getNumConstraint(ti);
     VectorXd cnst(num_qsc_cnst - 1);
     MatrixXd dcnst(num_qsc_cnst - 1, nq + num_qsc_pts);
+
+    // This is the function we'd like to learn
+    auto start = std::chrono::steady_clock::now();
+
     qsc_ptr->eval(ti, cache, qsc_weights, cnst, dcnst);
+
+    auto end = std::chrono::steady_clock::now();
+    auto diff = end - start;
+    std::cout << "qsc eval: " << std::chrono::duration<double, std::nano>(diff).count()
+              << " nano-seconds" << std::endl;
+
+    // std::cout << "q: " << cache.getQ().transpose() << ": " << std::endl;
+    // std::cout << "cnst: " << cnst.transpose() << std::endl;
+    // std::cout << "dcnst: " << dcnst.transpose() << std::endl << std::endl;
+    
     memcpy(c + nc_accum, cnst.data(), sizeof(double) * (num_qsc_cnst - 1));
     c[nc_accum + num_qsc_cnst - 1] = 0.0;
     memcpy(G + ng_accum, dcnst.data(), sizeof(double) * dcnst.size());
     nc_accum += num_qsc_cnst;
     ng_accum += static_cast<int>(dcnst.size());
   }
+
+  // std::cout << static_cast<double>(clock() - start) / CLOCKS_PER_SEC << std::endl;
 }
 
 static void IK_cost_fun(double* x, double& J, double* dJ) {
@@ -180,11 +203,28 @@ static int snoptIKfun(snopt::integer* Status, snopt::integer* n,
                       snopt::doublereal G[], char* cu, snopt::integer* lencu,
                       snopt::integer iu[], snopt::integer* leniu,
                       snopt::doublereal ru[], snopt::integer* lenru) {
+  // clock_t start = clock();
+  auto start = std::chrono::steady_clock::now();
+
   Map<VectorXd> q(x, nq);
   KinematicsCache<double> cache =
       model->doKinematics(q);  // TODO: pass this into the function?
+  auto end_kc = std::chrono::steady_clock::now();
+
   IK_cost_fun(x, F[0], G);
   IK_constraint_fun(cache, x, &F[1], &G[nq]);
+
+  auto end = std::chrono::steady_clock::now();
+  auto diff = end - start;
+  auto diff_kc = end_kc - start;
+
+  std::cout << "kin_cache: " << std::chrono::duration<double, std::nano>(diff_kc).count()
+            << " nano-seconds" << std::endl;
+
+  std::cout << "snoptIKfun: " << std::chrono::duration<double, std::nano>(diff).count()
+            << " nano-seconds" << std::endl;
+
+  // std::cout << static_cast<double>(clock() - start) / CLOCKS_PER_SEC << std::endl;
   return 0;
 }
 
