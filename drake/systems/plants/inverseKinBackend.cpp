@@ -105,9 +105,46 @@ static snopt::integer nF_tmp;
 static snopt::integer nG_tmp;
 static snopt::integer nx_tmp;
 
+// #define WXM_QSC_NN
+
+// #define WXM_VERBOSE
+
+#ifdef WXM_QSC_NN
+#include "/home/wxm/dev/learn_qsc_manifold/eigen_nn/EigenNN.hh" // wxm
+EigenNN* QSC_NN;
+#endif
+
+#define WXM_STOPWATCH
+
+#ifdef WXM_STOPWATCH
+#include "/home/wxm/software/Stopwatch/src/Stopwatch.h" // wxm
+#endif
+
+// #define WXM_CREATE_QSC_SAMPLES
+
+#ifdef WXM_CREATE_QSC_SAMPLES
+#include <fstream>
+std::ofstream file_("/home/wxm/Desktop/val_qsc_samples.csv");
+
+void write_sample_to_data_file(Eigen::VectorXd q, Eigen::VectorXd cnst,
+                               Eigen::MatrixXd dcnst) {
+  for (int q_i = 0; q_i < q.size(); q_i++) file_ << q(q_i) << ",";
+
+  for (int c_i = 0; c_i < cnst.size(); c_i++) file_ << cnst(c_i) << ",";
+
+  for (int dc_i = 0; dc_i < dcnst.size(); dc_i++) file_ << dcnst(dc_i) << ",";
+
+  file_ << std::endl;
+}
+#endif
+
 static void gevalNumerical(void (*func_ptr)(const VectorXd&, VectorXd&),
                            const VectorXd& x, VectorXd& c, MatrixXd& dc,
                            int order = 2) {
+  #ifdef WXM_STOPWATCH
+  TICK("gevalNumerical");
+  #endif
+
   int nx = static_cast<int>(x.rows());
   (*func_ptr)(x, c);
   int nc = static_cast<int>(c.rows());
@@ -130,11 +167,17 @@ static void gevalNumerical(void (*func_ptr)(const VectorXd&, VectorXd&),
       }
     }
   }
+
+  #ifdef WXM_STOPWATCH
+  TOCK("gevalNumerical");
+  #endif
 }
 
 static void IK_constraint_fun(KinematicsCache<double>& cache, double* x,
                               double* c, double* G) {
-  // clock_t start = clock();
+  #ifdef WXM_STOPWATCH
+  TICK("IK_constraint_fun");
+  #endif
 
   double* qsc_weights = nullptr;
   if (qscActiveFlag) {
@@ -164,18 +207,63 @@ static void IK_constraint_fun(KinematicsCache<double>& cache, double* x,
     MatrixXd dcnst(num_qsc_cnst - 1, nq + num_qsc_pts);
 
     // This is the function we'd like to learn
+    #ifdef WXM_VERBOSE
     auto start = std::chrono::steady_clock::now();
+    #endif
 
+    #ifdef WXM_QSC_NN
+    Eigen::VectorXd input(nq);
+    memcpy(input.data(), x, sizeof(double) * nq);
+    // input(0) = 0; input(1) = 0;
+
+    Eigen::VectorXd output = QSC_NN->predict(input);
+
+    // Slice into cnst and dcnst
+    cnst = output.head<2>();
+    dcnst.row(0) = output.segment<46>(2);
+    dcnst.row(1) = output.tail<46>();
+
+    // TODO: re-add offset for X and Y
+    #else
+    #ifdef WXM_STOPWATCH
+    TICK("qsc_ptr_eval");
+    #endif
     qsc_ptr->eval(ti, cache, qsc_weights, cnst, dcnst);
+    #ifdef WXM_STOPWATCH
+    TOCK("qsc_ptr_eval");
+    #endif
+    #endif
 
+    #ifdef WXM_VERBOSE
     auto end = std::chrono::steady_clock::now();
-    auto diff = end - start;
-    std::cout << "qsc eval: " << std::chrono::duration<double, std::nano>(diff).count()
-              << " nano-seconds" << std::endl;
+    #endif
+    
+    #ifdef WXM_QSC_NN
+    #ifdef WXM_VERBOSE
+    std::cout << "cnst: " << cnst.transpose() << std::endl;
+    std::cout << "dcnst: " << dcnst << std::endl;
 
-    // std::cout << "q: " << cache.getQ().transpose() << ": " << std::endl;
-    // std::cout << "cnst: " << cnst.transpose() << std::endl;
-    // std::cout << "dcnst: " << dcnst.transpose() << std::endl << std::endl;
+    VectorXd true_cnst(num_qsc_cnst - 1);
+    MatrixXd true_dcnst(num_qsc_cnst - 1, nq + num_qsc_pts);
+    qsc_ptr->eval(ti, cache, qsc_weights, true_cnst, true_dcnst);
+    std::cout << "true_cnst: " << true_cnst.transpose() << std::endl;
+    std::cout << "true_dcnst: " << true_dcnst << std::endl;
+    #endif
+    #endif
+
+    #ifdef WXM_CREATE_QSC_SAMPLES
+    Eigen::VectorXd input(nq);
+    memcpy(input.data(), x, sizeof(double) * nq);
+    write_sample_to_data_file(input, cnst, dcnst);
+    #endif
+
+    // OK, apart from last 8 columns - these are the ones corresponding to the feet contact point
+
+    #ifdef WXM_VERBOSE
+    auto diff = end - start;
+    std::cout << "qsc eval (NN): " << std::chrono::duration<double, std::nano>(diff).count()
+              << " nano-seconds" << std::endl;
+    #endif
     
     memcpy(c + nc_accum, cnst.data(), sizeof(double) * (num_qsc_cnst - 1));
     c[nc_accum + num_qsc_cnst - 1] = 0.0;
@@ -183,17 +271,24 @@ static void IK_constraint_fun(KinematicsCache<double>& cache, double* x,
     nc_accum += num_qsc_cnst;
     ng_accum += static_cast<int>(dcnst.size());
   }
-
-  // std::cout << static_cast<double>(clock() - start) / CLOCKS_PER_SEC << std::endl;
+  #ifdef WXM_STOPWATCH
+  TOCK("IK_constraint_fun");
+  #endif
 }
 
 static void IK_cost_fun(double* x, double& J, double* dJ) {
+  #ifdef WXM_STOPWATCH
+  TICK("IK_cost_fun");
+  #endif
   VectorXd q(nq);
   memcpy(q.data(), x, sizeof(double) * nq);
   VectorXd q_err = q - q_nom_i;
   J = q_err.transpose() * Q * q_err;
   VectorXd dJ_vec = 2 * q_err.transpose() * Q;
   memcpy(dJ, dJ_vec.data(), sizeof(double) * nq);
+  #ifdef WXM_STOPWATCH
+  TOCK("IK_cost_fun");
+  #endif
 }
 
 static int snoptIKfun(snopt::integer* Status, snopt::integer* n,
@@ -203,17 +298,24 @@ static int snoptIKfun(snopt::integer* Status, snopt::integer* n,
                       snopt::doublereal G[], char* cu, snopt::integer* lencu,
                       snopt::integer iu[], snopt::integer* leniu,
                       snopt::doublereal ru[], snopt::integer* lenru) {
-  // clock_t start = clock();
-  auto start = std::chrono::steady_clock::now();
+  #ifdef WXM_STOPWATCH
+  TICK("snoptIKfun");
+  #endif
 
+  #ifdef WXM_VERBOSE
+  auto start = std::chrono::steady_clock::now();
+  #endif
   Map<VectorXd> q(x, nq);
   KinematicsCache<double> cache =
       model->doKinematics(q);  // TODO: pass this into the function?
+  #ifdef WXM_VERBOSE
   auto end_kc = std::chrono::steady_clock::now();
+  #endif
 
   IK_cost_fun(x, F[0], G);
   IK_constraint_fun(cache, x, &F[1], &G[nq]);
 
+  #ifdef WXM_VERBOSE
   auto end = std::chrono::steady_clock::now();
   auto diff = end - start;
   auto diff_kc = end_kc - start;
@@ -223,8 +325,12 @@ static int snoptIKfun(snopt::integer* Status, snopt::integer* n,
 
   std::cout << "snoptIKfun: " << std::chrono::duration<double, std::nano>(diff).count()
             << " nano-seconds" << std::endl;
+  #endif
 
-  // std::cout << static_cast<double>(clock() - start) / CLOCKS_PER_SEC << std::endl;
+  #ifdef WXM_STOPWATCH
+  TOCK("snoptIKfun");
+  #endif
+
   return 0;
 }
 
@@ -470,6 +576,11 @@ void inverseKinBackend(
     RigidBodyConstraint** const constraint_array, MatrixBase<DerivedC>& q_sol,
     MatrixBase<DerivedD>& qdot_sol, MatrixBase<DerivedE>& qddot_sol, int* INFO,
     vector<string>& infeasible_constraint, const IKoptions& ikoptions) {
+  #ifdef WXM_STOPWATCH
+  Stopwatch::getInstance().setCustomSignature(32434);
+  TICK("inverseKinBackend");
+  #endif
+
   model = model_input;
   nT = nT_input;
   t = const_cast<double*>(t_input);
@@ -481,6 +592,10 @@ void inverseKinBackend(
     cerr << "Drake:inverseKinBackend: q_seed and q_nom must be of size nq x nT"
          << endl;
   }
+
+  #ifdef WXM_QSC_NN
+  QSC_NN = new EigenNN("/home/wxm/dev/learn_qsc_manifold/eigen_nn/model/");
+  #endif
 
   if (lenrw == 0) {  // then initialize (sninit needs some default allocation)
     lenrw = 500000;
@@ -2195,6 +2310,11 @@ void inverseKinBackend(
   delete[] mt_kc_array;
   delete[] st_lpc_array;
   delete[] mt_lpc_array;
+
+  #ifdef WXM_STOPWATCH
+  TOCK("inverseKinBackend");
+  Stopwatch::getInstance().sendAll();
+  #endif
 }
 template void inverseKinBackend(
     RigidBodyTree* model, const int mode, const int nT, const double* t,

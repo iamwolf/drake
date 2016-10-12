@@ -9,6 +9,13 @@
 
 using namespace Eigen;
 
+// #define WXM_COM_DCOM_NN
+
+#ifdef WXM_COM_DCOM_NN
+#include "/home/wxm/dev/learn_qsc_manifold/eigen_nn/EigenNN.hh" // wxm
+EigenNN* COM_DCOM_NN = new EigenNN("/home/wxm/dev/learn_qsc_manifold/eigen_nn/model/");
+#endif
+
 void drakePrintMatrix(const MatrixXd &mat) {
   for (int i = 0; i < mat.rows(); i++) {
     for (int j = 0; j < mat.cols(); j++) {
@@ -110,18 +117,48 @@ void QuasiStaticConstraint::eval(const double *t,
     int nq = this->robot->num_positions;
     dc.resize(2, nq + this->num_pts);
     
+    #ifdef WXM_TIMING
     auto start = std::chrono::steady_clock::now();
+    #endif
 
+    #ifdef WXM_COM_DCOM_NN
+    
+    #ifdef WXM_TIMING
+    auto start_q = std::chrono::steady_clock::now();
+    #endif
+
+    Eigen::VectorXd input = cache.getQ();
+
+    // Eigen::VectorXd xy_offsets = input.head<2>();
+    Eigen::VectorXd output = COM_DCOM_NN->predict(input);//input.tail<36>());
+
+    c = output.head<2>();// + xy_offsets;
+
+    Eigen::Matrix<double, 2, 38> tmp(output.tail<76>().data());
+    dc.block(0, 0, 2, nq) = tmp;
+    // std::cout << "c: " << c.transpose() << std::endl;
+    // std::cout << "dc: " << dc << std::endl;    
+
+    #ifdef WXM_TIMING
+    // auto end_q = std::chrono::steady_clock::now();
+    // auto diff_q = end_q - start_q;
+    // std::cout << "ACTUAL INFERENCE: " << std::chrono::duration<double, std::nano>(diff_q).count()
+    //           << " nano-seconds" << std::endl;
+    #endif
+
+    #else
     auto com = robot->centerOfMass(cache, m_robotnumset);
     auto dcom = robot->centerOfMassJacobian(cache, m_robotnumset, true);
-    
+    c = com.head(2);
+    dc.block(0, 0, 2, nq) = dcom.block(0, 0, 2, nq);
+    #endif
+
+    #ifdef WXM_TIMING
     auto end = std::chrono::steady_clock::now();
     auto diff = end - start;
     std::cout << "COM/COMJ: " << std::chrono::duration<double, std::nano>(diff).count()
               << " nano-seconds" << std::endl;
-
-    // std::cout << "com " << com.size() << std::endl;
-    // std::cout << "dcom " << dcom.size() << std::endl;
+    #endif
 
     MatrixXd contact_pos(3, this->num_pts);
     MatrixXd dcontact_pos(3 * this->num_pts, nq);
@@ -132,7 +169,7 @@ void QuasiStaticConstraint::eval(const double *t,
       auto body_contact_pos =
           robot->transformPoints(cache, body_pts[i], bodies[i], 0);
       auto dbody_contact_pos = robot->transformPointsJacobian(
-          cache, body_pts[i], bodies[i], 0, true);
+          cache, body_pts[i], bodies[i], 0, true); // wxm investigate whether adding another if switch could help here
 
       contact_pos.block(0, num_accum_pts, 3, this->num_body_pts[i]) =
           body_contact_pos;
@@ -146,10 +183,10 @@ void QuasiStaticConstraint::eval(const double *t,
     }
     center_pos = center_pos / this->num_pts;
     dcenter_pos = dcenter_pos / this->num_pts;
+
     MatrixXd support_pos(2, this->num_pts);
     MatrixXd dsupport_pos(2 * this->num_pts, nq);
-    c = com.head(2);
-    dc.block(0, 0, 2, nq) = dcom.block(0, 0, 2, nq);
+
     for (int i = 0; i < this->num_pts; i++) {
       support_pos.col(i) = center_pos.head(2) * (1.0 - this->shrinkFactor) +
                            contact_pos.block(0, i, 2, 1) * this->shrinkFactor;
@@ -157,7 +194,6 @@ void QuasiStaticConstraint::eval(const double *t,
           dcenter_pos.block(0, 0, 2, nq) * (1.0 - this->shrinkFactor) +
           dcontact_pos.block(3 * i, 0, 2, nq) * this->shrinkFactor;
       c = c - weights[i] * support_pos.col(i);
-      // std::cout << "weights " << i << ": " << weights[i] << std::endl;
       dc.block(0, 0, 2, nq) = dc.block(0, 0, 2, nq) -
                               weights[i] * dsupport_pos.block(2 * i, 0, 2, nq);
     }

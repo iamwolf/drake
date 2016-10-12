@@ -1,5 +1,7 @@
 cmake_minimum_required(VERSION 2.8.6) # for UseJava.cmake
 
+link_directories(/home/wxm/dev/learn_qsc_manifold/eigen_nn/build)
+
 # options
 option(BUILD_SHARED_LIBS "Build Drake with shared libraries." ON)
 option(RANDOMIZE_UNIT_TESTS "every matlab unit is started with a new random seed" OFF)

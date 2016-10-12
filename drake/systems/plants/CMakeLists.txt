@@ -2,6 +2,9 @@
 # matlab has it's own boost libraries.  DO NOT let any mex file depend
 # on the system boost (directly nor indirectly), or you're asking for trouble.
 
+# wxm
+link_directories(/home/wxm/dev/learn_qsc_manifold/eigen_nn/build)
+
 add_library_with_exports(LIB_NAME drakeXMLUtil SOURCE_FILES xmlUtil.cpp)
 target_link_libraries(drakeXMLUtil tinyxml2 spruce)
 pods_install_libraries(drakeXMLUtil)
@@ -108,13 +111,13 @@ endif()
 if (drakeIK_SRC_FILES)
   add_library_with_exports(LIB_NAME drakeIK SOURCE_FILES ${drakeIK_SRC_FILES})
   pods_use_pkg_config_packages(drakeIK ${drakeIK_PODS_PKG})
-  target_link_libraries(drakeIK drakeRBM drakeRigidBodyConstraint drakeIKoptions)
+  target_link_libraries(drakeIK drakeRBM drakeRigidBodyConstraint drakeIKoptions)# EigenNN) # wxm
   set_target_properties(drakeIK PROPERTIES COMPILE_FLAGS -fPIC)
   pods_install_libraries(drakeIK)
   pods_install_libraries(drakeIKoptions)
   drake_install_headers(RigidBodyIK.h IKoptions.h)
   pods_install_pkg_config_file(drake-ik
-    LIBS -ldrakeIK -ldrakeRigidBodyConstraint -ldrakeIKoptions
+    LIBS -ldrakeIK -ldrakeRigidBodyConstraint -ldrakeIKoptions #-lEigenNN # wxm
     REQUIRES drake-rbm
     VERSION 0.0.1)
 endif()
